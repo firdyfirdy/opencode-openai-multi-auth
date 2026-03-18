@@ -10,7 +10,7 @@ For `opencode.json` install, this package needs to be published to npm first:
 
 ```bash
 bun install
-bun test
+bun run test
 bun run typecheck
 bun run build
 npm publish
@@ -55,7 +55,7 @@ If you want to test locally first, use your real OpenCode config directory under
 1. Build the package:
 
 ```bash
-cd /home/worker/projects/opencode-multi-codex/opencode-openai-multi-auth
+cd /home/worker/projects/opencode-multi-codex
 bun install
 bun run build
 ```
@@ -63,7 +63,7 @@ bun run build
 2. Create this loader file at `~/.config/opencode/plugins/opencode-openai-multi-auth.js`:
 
 ```js
-export { default } from "/home/worker/projects/opencode-multi-codex/opencode-openai-multi-auth/dist/index.js"
+export { default } from "/home/worker/projects/opencode-multi-codex/dist/index.js"
 ```
 
 3. Restart OpenCode.
@@ -87,7 +87,7 @@ That path is for local development only. `opencode.json` npm install still needs
 
 ```bash
 bun install
-bun test
+bun run test
 bun run typecheck
 bun run build
 ```

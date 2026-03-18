@@ -14,6 +14,7 @@ describe("package", () => {
     expect(pkg.files).toContain("dist")
     expect(pkg.scripts.build).toBeString()
     expect(pkg.scripts.prepack).toBeString()
+    expect(pkg.scripts.test).toBe("bun test ./test/*.ts")
     expect(pkg.devDependencies["@opencode-ai/plugin"]).toBeString()
   })
 })

@@ -4,3 +4,11 @@ reference/
 .claude/
 AGENTS.md
 CLAUDE.md
+node_modules/
+*.log
+dist/
+*.tgz
+coverage/
+.env
+.env.*
+!.env.example
