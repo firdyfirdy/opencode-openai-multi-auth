@@ -30,9 +30,13 @@ export function manageUri() {
   return `${callbackBaseUrl()}/manage`
 }
 
-export function shouldAutoOpen() {
+export function isLoopbackCallbackHost() {
   const host = new URL(callbackBaseUrl()).hostname
   return host === "localhost" || host === "127.0.0.1" || host === "::1"
+}
+
+export function shouldAutoOpen() {
+  return isLoopbackCallbackHost()
 }
 
 function rnd(len: number) {
@@ -187,6 +191,9 @@ export function rewrite(input: RequestInfo | URL) {
 }
 
 export async function startBrowserAuth() {
+  if (!isLoopbackCallbackHost()) {
+    throw new Error("browser auth only supports loopback callbacks; use ChatGPT Pro/Plus (headless) for remote or VPS login")
+  }
   const pkce = await createPkce()
   const state = createState()
   const uri = redirectUri()

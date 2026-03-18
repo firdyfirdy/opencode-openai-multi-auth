@@ -9,6 +9,7 @@ import {
   parseClaims,
   redirectUri,
   refreshToken,
+  startBrowserAuth,
 } from "../src/auth.ts"
 
 describe("auth", () => {
@@ -69,6 +70,14 @@ describe("auth", () => {
     expect(callbackBaseUrl()).toBe("http://203.0.113.10:1455")
     expect(redirectUri()).toBe("http://203.0.113.10:1455/auth/callback")
     expect(url.searchParams.get("redirect_uri")).toBe("http://203.0.113.10:1455/auth/callback")
+
+    delete process.env.OPENCODE_MULTI_AUTH_PUBLIC_BASE_URL
+  })
+
+  it("rejects browser auth when the callback host is non-loopback", async () => {
+    process.env.OPENCODE_MULTI_AUTH_PUBLIC_BASE_URL = "http://203.0.113.10:1455/"
+
+    await expect(startBrowserAuth()).rejects.toThrow("loopback")
 
     delete process.env.OPENCODE_MULTI_AUTH_PUBLIC_BASE_URL
   })

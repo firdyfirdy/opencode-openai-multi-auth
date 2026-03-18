@@ -28,7 +28,7 @@ describe("plugin", () => {
 
     expect(hooks.auth?.provider).toBe("openai")
     expect(hooks.auth?.methods.map((x) => x.label)).toEqual([
-      "ChatGPT Pro/Plus (browser)",
+      "ChatGPT Pro/Plus (browser, loopback only)",
       "ChatGPT Pro/Plus (headless)",
       "Manually enter API Key",
       "Manage Accounts",

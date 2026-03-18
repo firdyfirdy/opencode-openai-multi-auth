@@ -71,7 +71,7 @@ export const OpenAIMultiAuth: Plugin = async (input) => {
       },
       methods: [
         {
-          label: "ChatGPT Pro/Plus (browser)",
+          label: "ChatGPT Pro/Plus (browser, loopback only)",
           type: "oauth",
           authorize: async () => {
             const flow = await startBrowserAuth()
