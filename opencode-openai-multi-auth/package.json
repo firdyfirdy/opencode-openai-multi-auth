@@ -1,0 +1,30 @@
+{
+  "name": "opencode-openai-multi-auth",
+  "version": "0.1.0",
+  "description": "Standalone multi-account OpenCode OpenAI auth plugin",
+  "type": "module",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "bunx tsc -p tsconfig.build.json",
+    "prepack": "bun run build",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.2.27",
+    "bun-types": "latest",
+    "typescript": "^5.9.3"
+  }
+}
