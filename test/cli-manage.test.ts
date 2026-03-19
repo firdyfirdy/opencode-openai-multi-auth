@@ -32,6 +32,7 @@ describe("cli-manage", () => {
   it("builds the account target list without duplicating actions", () => {
     expect(buildManageOptions([one, two], two)).toEqual([
       { label: "Add Account", value: "add", hint: "Login another OpenAI account" },
+      { label: "Refresh All Accounts", value: "refresh-all", hint: "Refresh usage for every saved account" },
       { label: "users1@gmail.com", value: "acc:a1", hint: "users1@gmail.com" },
       { label: "users2@gmail.com (Active)", value: "acc:a2", hint: "users2@gmail.com" },
     ])

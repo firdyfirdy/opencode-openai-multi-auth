@@ -1,7 +1,7 @@
 import type { Hooks, Plugin, PluginInput } from "@opencode-ai/plugin"
 import { classify } from "./fail.js"
 import { active, file, list, mark, pick, remove, setActive, upsert } from "./store.js"
-import { extractAccountId, extractEmail, extractSub, open, pollDeviceAuth, refreshToken, rewrite, shouldAutoOpen, startBrowserAuth, startDeviceAuth } from "./auth.js"
+import { extractAccountId, extractEmail, extractSub, fetchUsage, open, pollDeviceAuth, refreshToken, rewrite, shouldAutoOpen, startBrowserAuth, startDeviceAuth } from "./auth.js"
 import { buildManageOptions } from "./cli-manage.js"
 import { startManage } from "./manage.js"
 import { applyManage } from "./manage-result.js"
@@ -11,8 +11,9 @@ const DUMMY = "oauth_dummy_key"
 
 export const OpenAIMultiAuth: Plugin = async (input) => {
   const loc = file()
-  const rows = await list(loc)
-  const cur = await active(loc)
+  const current = await active(loc)
+  const rows = await usageRows(loc, await list(loc))
+  const cur = rows.find((row) => row.id === current?.id)
 
   return {
     auth: {
@@ -125,6 +126,7 @@ export const OpenAIMultiAuth: Plugin = async (input) => {
               options: [
                 { label: "Activate", value: "activate" },
                 { label: "Delete", value: "delete" },
+                { label: "Refresh Usage", value: "refresh" },
               ],
             },
           ],
@@ -132,7 +134,23 @@ export const OpenAIMultiAuth: Plugin = async (input) => {
             if (inputs?.target === "add") {
               return startAddAccount(input, loc)
             }
+            if (inputs?.target === "refresh-all") {
+              return {
+                url: "",
+                instructions: "Refreshing usage for all saved accounts...",
+                method: "auto",
+                callback: async () => refreshUsage(loc),
+              }
+            }
             if (inputs?.target?.startsWith("acc:")) {
+              if (inputs.action === "refresh") {
+                return {
+                  url: "",
+                  instructions: "Refreshing usage for the selected account...",
+                  method: "auto",
+                  callback: async () => refreshUsage(loc, inputs.target.replace(/^acc:/, "")),
+                }
+              }
               const acc = await manage(loc, { target: inputs.target, action: inputs.action })
               return {
                 url: "",
@@ -162,6 +180,21 @@ export const OpenAIMultiAuth: Plugin = async (input) => {
 }
 
 export default OpenAIMultiAuth
+
+async function usageRows(loc: string, rows: Account[]) {
+  const now = Date.now()
+  const next: Account[] = []
+  for (const row of rows) {
+    if (!row.access || row.expires <= now) {
+      next.push(row)
+      continue
+    }
+    const usage = await fetchUsage(row.access, row.account_id)
+    if (usage) await mark(loc, row.id, { usage })
+    next.push(usage ? { ...row, usage } : row)
+  }
+  return next
+}
 
 async function saveOAuth(input: PluginInput, loc: string, token: Token, options?: { activate?: boolean; mirror?: boolean; returnActive?: boolean }) {
   const now = Date.now()
@@ -312,6 +345,18 @@ function result(acc: Account) {
     expires: acc.expires,
     accountId: acc.account_id,
   }
+}
+
+async function refreshUsage(loc: string, id?: string) {
+  const rows = await list(loc)
+  const target = id ? rows.filter((row) => row.id === id) : rows
+  await usageRows(loc, target)
+
+  const acc = await active(loc)
+  if (acc) return result(acc)
+
+  const selected = id ? target[0] : undefined
+  return selected ? result(selected) : { type: "failed" as const }
 }
 
 async function manage(loc: string, inputs: { target: string; action?: string }) {

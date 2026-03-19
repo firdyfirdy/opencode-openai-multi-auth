@@ -49,6 +49,11 @@ export type Account = {
   last_used: number
   cooldown_until?: number
   last_error?: string
+  usage?: {
+    primary_used_percent: number
+    fetched_at: number
+    reset_at?: string
+  }
 }
 
 export type Registry = {

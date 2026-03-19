@@ -5,6 +5,7 @@ import {
   createPkce,
   exchangeCode,
   extractAccountId,
+  fetchUsage,
   parseAuthInput,
   parseClaims,
   redirectUri,
@@ -80,6 +81,70 @@ describe("auth", () => {
     await expect(startBrowserAuth()).rejects.toThrow("loopback")
 
     delete process.env.OPENCODE_MULTI_AUTH_PUBLIC_BASE_URL
+  })
+
+  it("fetches primary usage with bearer auth and account header", async () => {
+    const old = globalThis.fetch
+    let seen: RequestInit | undefined
+    let seenUrl = ""
+    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+      seenUrl = input instanceof URL ? input.toString() : typeof input === "string" ? input : input.url
+      seen = init
+      return new Response(
+        JSON.stringify({
+          rate_limit: {
+            primary_window: {
+              used_percent: 89,
+              reset_at: "2026-03-18T00:00:00Z",
+            },
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )
+    }) as unknown as typeof fetch
+
+    const usage = await fetchUsage("access-1", "acct-1")
+    const headers = new Headers(seen?.headers)
+
+    expect(seenUrl).toBe("https://chatgpt.com/backend-api/wham/usage")
+    expect(headers.get("authorization")).toBe("Bearer access-1")
+    expect(headers.get("ChatGPT-Account-Id")).toBe("acct-1")
+    expect(usage).toEqual(
+      expect.objectContaining({
+        primary_used_percent: 89,
+        reset_at: "2026-03-18T00:00:00Z",
+      }),
+    )
+    expect(typeof usage?.fetched_at).toBe("number")
+
+    globalThis.fetch = old
+  })
+
+  it("returns undefined when usage lookup fails", async () => {
+    const old = globalThis.fetch
+    globalThis.fetch = mock(async () => new Response("boom", { status: 500 })) as unknown as typeof fetch
+
+    await expect(fetchUsage("access-1", "acct-1")).resolves.toBeUndefined()
+
+    globalThis.fetch = old
+  })
+
+  it("uses an abort signal for best-effort usage lookups", async () => {
+    const old = globalThis.fetch
+    let seen: RequestInit | undefined
+    globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      seen = init
+      return new Response(JSON.stringify({ rate_limit: { primary_window: { used_percent: 1 } } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    }) as unknown as typeof fetch
+
+    await fetchUsage("access-1")
+
+    expect(seen?.signal).toBeInstanceOf(AbortSignal)
+
+    globalThis.fetch = old
   })
 })
 

@@ -179,6 +179,37 @@ export async function refreshToken(refresh: string) {
   return (await res.json()) as Token
 }
 
+export async function fetchUsage(access: string, accountId?: string) {
+  try {
+    const headers = new Headers({ authorization: `Bearer ${access}` })
+    if (accountId) headers.set("ChatGPT-Account-Id", accountId)
+    const signal = AbortSignal.timeout(1500)
+
+    const res = await fetch("https://chatgpt.com/backend-api/wham/usage", { headers, signal })
+    if (!res.ok) return
+
+    const json = await res.json() as {
+      rate_limit?: {
+        primary_window?: {
+          used_percent?: number
+          reset_at?: string
+        }
+      }
+    }
+
+    const primary = json.rate_limit?.primary_window
+    if (typeof primary?.used_percent !== "number") return
+
+    return {
+      primary_used_percent: primary.used_percent,
+      reset_at: primary.reset_at,
+      fetched_at: Date.now(),
+    }
+  } catch {
+    return
+  }
+}
+
 export async function open(url: string) {
   const cmd = process.platform === "darwin" ? ["open", url] : process.platform === "win32" ? ["cmd", "/c", "start", "", url] : ["xdg-open", url]
   Bun.spawn(cmd, { stdin: "ignore", stdout: "ignore", stderr: "ignore" })
