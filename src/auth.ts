@@ -1,4 +1,6 @@
 import os from "node:os"
+import process from "node:process"
+import { createInterface } from "node:readline/promises"
 import { setTimeout as sleep } from "node:timers/promises"
 import type { Claims, Pkce, Token } from "./types.js"
 
@@ -223,6 +225,15 @@ export async function open(url: string) {
   Bun.spawn(cmd, { stdin: "ignore", stdout: "ignore", stderr: "ignore" })
 }
 
+async function promptCallbackInput(message: string, signal?: AbortSignal) {
+  const rl = createInterface({ input: process.stdin, output: process.stdout })
+  try {
+    return await rl.question(`${message}\n> `, { signal })
+  } finally {
+    rl.close()
+  }
+}
+
 export function rewrite(input: RequestInfo | URL) {
   const url = input instanceof URL ? input : new URL(typeof input === "string" ? input : input.url)
   if (url.pathname.includes("/v1/responses") || url.pathname.includes("/chat/completions")) return new URL(CODEX_URL)
@@ -243,6 +254,20 @@ export async function startBrowserAuth() {
     resolve = res
     reject = rej
   })
+  let settled = false
+
+  function succeed(token: Token) {
+    if (settled) return
+    settled = true
+    resolve?.(token)
+  }
+
+  function fail(reason: unknown) {
+    if (settled) return
+    settled = true
+    reject?.(reason)
+  }
+
   const server = Bun.serve({
     port: PORT,
     fetch(req) {
@@ -252,23 +277,36 @@ export async function startBrowserAuth() {
       const code = url.searchParams.get("code")
       const got = url.searchParams.get("state")
       if (err) {
-        reject?.(new Error(err))
+        fail(new Error(err))
         return page("Authorization failed", err)
       }
       if (!code || got !== state) {
-        reject?.(new Error("invalid callback"))
+        fail(new Error("invalid callback"))
         return page("Authorization failed", "Invalid callback")
       }
       void exchangeCode(code, uri, pkce)
-        .then((token) => resolve?.(token))
-        .catch((err) => reject?.(err))
+        .then((token) => succeed(token))
+        .catch((err) => fail(err))
       return page("Authorization successful", "You can close this window.")
     },
   })
   return {
     url,
+    async completeFromPaste(input: string) {
+      const parsed = parseAuthInput(input)
+      if (!parsed.code) {
+        throw new Error("Paste the full callback URL, a code/state query string, or at least the authorization code.")
+      }
+      if (parsed.state && parsed.state !== state) {
+        throw new Error("The pasted callback does not match the active authorization link.")
+      }
+      if (settled) return wait
+      const token = await exchangeCode(parsed.code, uri, pkce)
+      succeed(token)
+      return token
+    },
     async wait() {
-      const timer = setTimeout(() => reject?.(new Error("oauth timeout")), 5 * 60 * 1000)
+      const timer = setTimeout(() => fail(new Error("oauth timeout")), 5 * 60 * 1000)
       try {
         return await wait
       } finally {
@@ -276,6 +314,53 @@ export async function startBrowserAuth() {
         server.stop(true)
       }
     },
+  }
+}
+
+export async function waitForAddAccountToken(
+  flow: Awaited<ReturnType<typeof startBrowserAuth>>,
+  options?: {
+    fallbackMs?: number
+    prompt?: (message: string, signal?: AbortSignal) => Promise<string>
+  },
+) {
+  const fallbackMs = options?.fallbackMs ?? 15_000
+  const prompt = options?.prompt ?? promptCallbackInput
+  const browser = flow.wait()
+  const raced = await Promise.race([
+    browser.then((token) => ({ kind: "token" as const, token })),
+    sleep(fallbackMs).then(() => ({ kind: "paste" as const })),
+  ])
+  if (raced.kind === "token") return raced.token
+
+  for (;;) {
+    const controller = new AbortController()
+    const promptInput = prompt(
+      "Paste the full callback URL, query string, or code from the localhost callback page.",
+      controller.signal,
+    ).then((value) => value.trim())
+    const next = await Promise.race([
+      browser.then((token) => ({ kind: "token" as const, token })),
+      promptInput.then((input) => ({ kind: "input" as const, input })),
+    ])
+    if (next.kind === "token") {
+      controller.abort()
+      return next.token
+    }
+    try {
+      return await Promise.race([browser, flow.completeFromPaste(next.input)])
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        (error.message.includes("Paste the full callback URL") ||
+          error.message.includes("does not match the active authorization link") ||
+          error.message.startsWith("token exchange failed"))
+      ) {
+        console.log(error.message)
+        continue
+      }
+      throw error
+    }
   }
 }
 

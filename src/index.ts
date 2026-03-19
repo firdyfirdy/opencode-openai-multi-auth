@@ -1,7 +1,7 @@
 import type { Hooks, Plugin, PluginInput } from "@opencode-ai/plugin"
 import { classify } from "./fail.js"
 import { active, file, list, mark, pick, remove, setActive, upsert } from "./store.js"
-import { extractAccountId, extractEmail, extractSub, fetchUsage, open, pollDeviceAuth, refreshToken, rewrite, shouldAutoOpen, startBrowserAuth, startDeviceAuth } from "./auth.js"
+import { extractAccountId, extractEmail, extractSub, fetchUsage, open, pollDeviceAuth, refreshToken, rewrite, shouldAutoOpen, startBrowserAuth, startDeviceAuth, waitForAddAccountToken } from "./auth.js"
 import { buildManageOptions } from "./cli-manage.js"
 import { startManage } from "./manage.js"
 import { applyManage } from "./manage-result.js"
@@ -233,10 +233,10 @@ async function startAddAccount(input: PluginInput, loc: string) {
   if (shouldAutoOpen()) await open(flow.url)
   return {
     url: flow.url,
-    instructions: "Complete authorization in your browser. The new account will be saved without switching the current active account.",
+    instructions: "Complete authorization in your browser. If the CLI is still waiting after about 15 seconds, paste the callback URL or code here.",
     method: "auto" as const,
     callback: async () => {
-      const token = await flow.wait()
+      const token = await waitForAddAccountToken(flow)
       return saveOAuth(input, loc, token, {
         activate: !before,
         mirror: !before,

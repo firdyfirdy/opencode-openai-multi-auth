@@ -11,6 +11,7 @@ import {
   redirectUri,
   refreshToken,
   startBrowserAuth,
+  waitForAddAccountToken,
 } from "../src/auth.ts"
 
 describe("auth", () => {
@@ -149,6 +150,88 @@ describe("auth", () => {
     expect(seen?.signal).toBeInstanceOf(AbortSignal)
 
     globalThis.fetch = old
+  })
+
+  it("falls back to pasted callback input after the add-account timeout", async () => {
+    let prompted = 0
+    let pasted = ""
+    const token = { access_token: "a", refresh_token: "r", expires_in: 60 }
+    const flow = {
+      url: "http://localhost:1455/auth",
+      wait: () => new Promise<typeof token>(() => {}),
+      completeFromPaste: mock(async (input: string) => {
+        pasted = input
+        return token
+      }),
+    }
+
+    const result = await waitForAddAccountToken(flow, {
+      fallbackMs: 10,
+      prompt: async () => {
+        prompted++
+        return "http://localhost:1455/auth/callback?code=abc&state=state-1"
+      },
+    })
+
+    expect(prompted).toBe(1)
+    expect(pasted).toContain("code=abc")
+    expect(result).toEqual(token)
+  })
+
+  it("does not prompt when browser auth completes before the add-account fallback", async () => {
+    let prompted = 0
+    const token = { access_token: "a", refresh_token: "r", expires_in: 60 }
+    const flow = {
+      url: "http://localhost:1455/auth",
+      wait: async () => token,
+      completeFromPaste: mock(async () => token),
+    }
+
+    const result = await waitForAddAccountToken(flow, {
+      fallbackMs: 100,
+      prompt: async () => {
+        prompted++
+        return "abc"
+      },
+    })
+
+    expect(prompted).toBe(0)
+    expect(result).toEqual(token)
+  })
+
+  it("lets the browser callback win even after the paste prompt appears", async () => {
+    let releaseBrowser!: (token: { access_token: string; refresh_token: string; expires_in: number }) => void
+    let resolvePrompt!: (value: string) => void
+    let prompted = 0
+    const token = { access_token: "a", refresh_token: "r", expires_in: 60 }
+    const flow = {
+      url: "http://localhost:1455/auth",
+      wait: () => new Promise<typeof token>((resolve) => {
+        releaseBrowser = resolve
+      }),
+      completeFromPaste: mock(async () => {
+        throw new Error("should not use pasted callback when browser already completed")
+      }),
+    }
+
+    const resultPromise = waitForAddAccountToken(flow, {
+      fallbackMs: 10,
+      prompt: () => {
+        prompted++
+        return new Promise<string>((resolve) => {
+          resolvePrompt = resolve
+        })
+      },
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(prompted).toBe(1)
+
+    releaseBrowser(token)
+    const result = await resultPromise
+    expect(result).toEqual(token)
+
+    resolvePrompt("http://localhost:1455/auth/callback?code=late&state=state-1")
   })
 })
 
