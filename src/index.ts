@@ -33,40 +33,47 @@ export const OpenAIMultiAuth: Plugin = async (input) => {
               acc = seeded
             }
 
-            acc = await ready(input, loc, acc)
-            const headers = clone(init?.headers)
-            headers.delete("authorization")
-            headers.delete("Authorization")
-            headers.set("authorization", `Bearer ${acc.access}`)
-            if (acc.account_id) headers.set("ChatGPT-Account-Id", acc.account_id)
-
             const url = rewrite(req)
-            const one = await fetch(url, { ...init, headers })
-            if (one.ok) {
-              await mark(loc, acc.id, { last_used: Date.now(), cooldown_until: undefined, last_error: undefined })
-              return one
+            const attempted = new Set<string>()
+
+            while (true) {
+              acc = await ready(input, loc, acc)
+              attempted.add(acc.id)
+
+              const headers = clone(init?.headers)
+              headers.delete("authorization")
+              headers.delete("Authorization")
+              headers.set("authorization", `Bearer ${acc.access}`)
+              if (acc.account_id) headers.set("ChatGPT-Account-Id", acc.account_id)
+
+              const res = await fetch(url, { ...init, headers })
+              if (res.ok) {
+                await mark(loc, acc.id, { last_used: Date.now(), cooldown_until: undefined, last_error: undefined })
+                return res
+              }
+
+              const body = await res.clone().text().catch(() => "")
+              const code = parseCode(body)
+              const usage = await fetchUsage(acc.access, acc.account_id)
+              if (usage) {
+                acc = { ...acc, usage }
+                await mark(loc, acc.id, { usage })
+              }
+              const result = classify({ status: res.status, headers: res.headers, code, body })
+              const exhausted = leftUsageExhausted(acc)
+              const shouldSwitch = exhausted || result.kind === "hard-switch" || result.kind === "cooldown-switch"
+              if (!shouldSwitch) return res
+
+              await mark(loc, acc.id, {
+                cooldown_until: result.wait ? Date.now() + result.wait : undefined,
+                last_error: code || `${res.status}`,
+              })
+              const next = await pick(loc, attempted)
+              if (!next) return res
+              await setActive(loc, next.id)
+              await mirror(input, next)
+              acc = next
             }
-
-            const body = await one.clone().text().catch(() => "")
-            const code = parseCode(body)
-            const result = classify({ status: one.status, headers: one.headers, code, body })
-            if (result.kind === "no-switch" || result.kind === "same-account-retry") return one
-
-            await mark(loc, acc.id, {
-              cooldown_until: result.wait ? Date.now() + result.wait : undefined,
-              last_error: code || `${one.status}`,
-            })
-            const next = await pick(loc, acc.id)
-            if (!next) return one
-            await setActive(loc, next.id)
-            await mirror(input, next)
-            const two = await ready(input, loc, next)
-            const retryHeaders = clone(init?.headers)
-            retryHeaders.delete("authorization")
-            retryHeaders.delete("Authorization")
-            retryHeaders.set("authorization", `Bearer ${two.access}`)
-            if (two.account_id) retryHeaders.set("ChatGPT-Account-Id", two.account_id)
-            return fetch(url, { ...init, headers: retryHeaders })
           },
         }
       },
@@ -345,6 +352,10 @@ function result(acc: Account) {
     expires: acc.expires,
     accountId: acc.account_id,
   }
+}
+
+function leftUsageExhausted(acc: Account) {
+  return typeof acc.usage?.primary_used_percent === "number" && acc.usage.primary_used_percent >= 100
 }
 
 async function refreshUsage(loc: string, id?: string) {

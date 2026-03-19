@@ -82,8 +82,9 @@ export async function mark(loc: string, id: string, patch: Partial<Account>) {
   await save(loc, state)
 }
 
-export async function pick(loc: string, skip?: string) {
+export async function pick(loc: string, skip?: string | Set<string>) {
   const now = Date.now()
   const state = await load(loc)
-  return state.accounts.find((x) => x.id !== skip && (!x.cooldown_until || x.cooldown_until <= now))
+  const skipped = typeof skip === "string" ? new Set(skip ? [skip] : []) : skip ?? new Set<string>()
+  return state.accounts.find((x) => !skipped.has(x.id) && (!x.cooldown_until || x.cooldown_until <= now))
 }

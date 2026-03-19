@@ -31,7 +31,9 @@ export function cooldownMs(headers: Headers) {
 export function classify(input: { status: number; headers: Headers; code: string; body: string }, wait = 300_000): Fail {
   const status = normalizeStatus(input.status, input.body, input.code)
   if (status === 401 || status === 403) return { kind: "hard-switch" }
-  if (input.code === "insufficient_quota" || input.code === "usage_not_included") return { kind: "hard-switch" }
+  if (input.code === "insufficient_quota" || input.code === "usage_not_included" || input.code === "usage_limit_reached") {
+    return { kind: "hard-switch" }
+  }
   if (status !== 429) return { kind: "no-switch" }
   const ms = cooldownMs(input.headers)
   if (ms >= wait) return { kind: "cooldown-switch", wait: ms }

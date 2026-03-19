@@ -17,6 +17,14 @@ describe("fail", () => {
     expect(classify({ status: 401, headers: new Headers(), code: "", body: "" }).kind).toBe("hard-switch")
     expect(
       classify({
+        status: 404,
+        headers: new Headers(),
+        code: "usage_limit_reached",
+        body: JSON.stringify({ error: { code: "usage_limit_reached" } }),
+      }).kind,
+    ).toBe("hard-switch")
+    expect(
+      classify({
         status: 429,
         headers: new Headers({ "retry-after": "600" }),
         code: "",
