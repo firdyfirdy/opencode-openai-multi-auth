@@ -194,15 +194,23 @@ export async function fetchUsage(access: string, accountId?: string) {
           used_percent?: number
           reset_at?: string
         }
+        secondary_window?: {
+          used_percent?: number
+        }
       }
     }
 
     const primary = json.rate_limit?.primary_window
-    if (typeof primary?.used_percent !== "number") return
+    const secondary = json.rate_limit?.secondary_window
+    if (
+      typeof primary?.used_percent !== "number" &&
+      typeof secondary?.used_percent !== "number"
+    ) return
 
     return {
-      primary_used_percent: primary.used_percent,
-      reset_at: primary.reset_at,
+      primary_used_percent: primary?.used_percent ?? 0,
+      secondary_used_percent: typeof secondary?.used_percent === "number" ? secondary.used_percent : undefined,
+      reset_at: primary?.reset_at,
       fetched_at: Date.now(),
     }
   } catch {

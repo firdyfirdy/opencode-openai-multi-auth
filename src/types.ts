@@ -51,6 +51,7 @@ export type Account = {
   last_error?: string
   usage?: {
     primary_used_percent: number
+    secondary_used_percent?: number
     fetched_at: number
     reset_at?: string
   }

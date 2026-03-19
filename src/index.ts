@@ -55,17 +55,18 @@ export const OpenAIMultiAuth: Plugin = async (input) => {
               const body = await res.clone().text().catch(() => "")
               const code = parseCode(body)
               const usage = await fetchUsage(acc.access, acc.account_id)
+              const usageLookupFailed = !usage
               if (usage) {
                 acc = { ...acc, usage }
                 await mark(loc, acc.id, { usage })
               }
               const result = classify({ status: res.status, headers: res.headers, code, body })
               const exhausted = leftUsageExhausted(acc)
-              const shouldSwitch = exhausted || result.kind === "hard-switch" || result.kind === "cooldown-switch"
+              const shouldSwitch = usageLookupFailed || exhausted || result.kind === "hard-switch" || result.kind === "cooldown-switch"
               if (!shouldSwitch) return res
 
               await mark(loc, acc.id, {
-                cooldown_until: result.wait ? Date.now() + result.wait : undefined,
+                cooldown_until: result.kind === "cooldown-switch" && result.wait ? Date.now() + result.wait : undefined,
                 last_error: code || `${res.status}`,
               })
               const next = await pick(loc, attempted)
@@ -355,7 +356,10 @@ function result(acc: Account) {
 }
 
 function leftUsageExhausted(acc: Account) {
-  return typeof acc.usage?.primary_used_percent === "number" && acc.usage.primary_used_percent >= 100
+  return (
+    (typeof acc.usage?.primary_used_percent === "number" && acc.usage.primary_used_percent >= 100) ||
+    (typeof acc.usage?.secondary_used_percent === "number" && acc.usage.secondary_used_percent >= 100)
+  )
 }
 
 async function refreshUsage(loc: string, id?: string) {

@@ -111,7 +111,7 @@ describe("plugin", () => {
     delete process.env.OPENCODE_MULTI_AUTH_PATH
   })
 
-  it("shows primary usage in Manage Accounts when usage lookup succeeds", async () => {
+  it("shows daily and weekly usage in Manage Accounts when usage lookup succeeds", async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "multi-auth-plugin-"))
     const file = path.join(dir, "auth.json")
     process.env.OPENCODE_MULTI_AUTH_PATH = file
@@ -144,12 +144,16 @@ describe("plugin", () => {
     globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const headers = new Headers(init?.headers)
       const account = headers.get("ChatGPT-Account-Id")
-      const used = account === "acct-1" ? 12 : 89
+      const primary = account === "acct-1" ? 47 : 53
+      const secondary = account === "acct-1" ? 100 : 0
       return new Response(
         JSON.stringify({
           rate_limit: {
             primary_window: {
-              used_percent: used,
+              used_percent: primary,
+            },
+            secondary_window: {
+              used_percent: secondary,
             },
           },
         }),
@@ -178,8 +182,8 @@ describe("plugin", () => {
     expect(targetOpts).toEqual([
       { label: "Add Account", value: "add", hint: "Login another OpenAI account" },
       { label: "Refresh All Accounts", value: "refresh-all", hint: "Refresh usage for every saved account" },
-      { label: "users1@gmail.com", value: "acc:a1", hint: "users1@gmail.com · Left 88%" },
-      { label: "users2@gmail.com (Active)", value: "acc:a2", hint: "users2@gmail.com · Left 11%" },
+      { label: "users1@gmail.com (Daily Usage: 47% | Weekly Usage: 100%)", value: "acc:a1" },
+      { label: "users2@gmail.com (Daily Usage: 53% | Weekly Usage: 0%) (Active)", value: "acc:a2" },
     ])
 
     globalThis.fetch = old
@@ -291,7 +295,10 @@ describe("plugin", () => {
       if (account) seen.push(account)
       return new Response(
         JSON.stringify({
-          rate_limit: { primary_window: { used_percent: 33 } },
+          rate_limit: {
+            primary_window: { used_percent: 33 },
+            secondary_window: { used_percent: 67 },
+          },
         }),
         { status: 200, headers: { "content-type": "application/json" } },
       )
@@ -324,6 +331,7 @@ describe("plugin", () => {
     const state = await load(file)
     expect(state.active_account_id).toBe("a2")
     expect(state.accounts.find((x) => x.id === "a1")?.usage?.primary_used_percent).toBe(33)
+    expect(state.accounts.find((x) => x.id === "a1")?.usage?.secondary_used_percent).toBe(67)
 
     globalThis.fetch = mock(async () => new Response("boom", { status: 500 })) as unknown as typeof fetch
     const reopened = await plugin({
@@ -345,8 +353,8 @@ describe("plugin", () => {
     expect(reopenedOpts).toEqual([
       { label: "Add Account", value: "add", hint: "Login another OpenAI account" },
       { label: "Refresh All Accounts", value: "refresh-all", hint: "Refresh usage for every saved account" },
-      { label: "users1@gmail.com", value: "acc:a1", hint: "users1@gmail.com · Left 67%" },
-      { label: "users2@gmail.com (Active)", value: "acc:a2", hint: "users2@gmail.com · Left 67%" },
+      { label: "users1@gmail.com (Daily Usage: 33% | Weekly Usage: 67%)", value: "acc:a1" },
+      { label: "users2@gmail.com (Daily Usage: 33% | Weekly Usage: 67%) (Active)", value: "acc:a2" },
     ])
 
     globalThis.fetch = old
@@ -391,7 +399,10 @@ describe("plugin", () => {
       if (account) seen.push(account)
       return new Response(
         JSON.stringify({
-          rate_limit: { primary_window: { used_percent: 44 } },
+          rate_limit: {
+            primary_window: { used_percent: 44 },
+            secondary_window: { used_percent: 100 },
+          },
         }),
         { status: 200, headers: { "content-type": "application/json" } },
       )
@@ -424,6 +435,7 @@ describe("plugin", () => {
     const state = await load(file)
     expect(state.active_account_id).toBe("a2")
     expect(state.accounts.find((x) => x.id === "a1")?.usage?.primary_used_percent).toBe(44)
+    expect(state.accounts.find((x) => x.id === "a1")?.usage?.secondary_used_percent).toBe(100)
     expect(state.accounts.find((x) => x.id === "a2")?.usage).toBeUndefined()
 
     globalThis.fetch = mock(async () => new Response("boom", { status: 500 })) as unknown as typeof fetch
@@ -446,7 +458,7 @@ describe("plugin", () => {
     expect(reopenedOpts).toEqual([
       { label: "Add Account", value: "add", hint: "Login another OpenAI account" },
       { label: "Refresh All Accounts", value: "refresh-all", hint: "Refresh usage for every saved account" },
-      { label: "users1@gmail.com", value: "acc:a1", hint: "users1@gmail.com · Left 56%" },
+      { label: "users1@gmail.com (Daily Usage: 44% | Weekly Usage: 100%)", value: "acc:a1" },
       { label: "users2@gmail.com (Active)", value: "acc:a2", hint: "users2@gmail.com" },
     ])
 

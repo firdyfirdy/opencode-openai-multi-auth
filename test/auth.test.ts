@@ -83,7 +83,7 @@ describe("auth", () => {
     delete process.env.OPENCODE_MULTI_AUTH_PUBLIC_BASE_URL
   })
 
-  it("fetches primary usage with bearer auth and account header", async () => {
+  it("fetches daily and weekly usage with bearer auth and account header", async () => {
     const old = globalThis.fetch
     let seen: RequestInit | undefined
     let seenUrl = ""
@@ -94,8 +94,11 @@ describe("auth", () => {
         JSON.stringify({
           rate_limit: {
             primary_window: {
-              used_percent: 89,
+              used_percent: 47,
               reset_at: "2026-03-18T00:00:00Z",
+            },
+            secondary_window: {
+              used_percent: 100,
             },
           },
         }),
@@ -111,7 +114,8 @@ describe("auth", () => {
     expect(headers.get("ChatGPT-Account-Id")).toBe("acct-1")
     expect(usage).toEqual(
       expect.objectContaining({
-        primary_used_percent: 89,
+        primary_used_percent: 47,
+        secondary_used_percent: 100,
         reset_at: "2026-03-18T00:00:00Z",
       }),
     )
